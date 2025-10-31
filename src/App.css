@@ -139,6 +139,13 @@ h1, h2, h3, h4, h5, h6 {
   padding: 24px;
   flex: 1;
   transition: margin-left 0.3s ease-out;
+  overflow: hidden; /* Prevent body scroll */
+}
+
+.main-content-wrapper {
+  width: 100%;
+  max-width: 1400px; /* Constrains content on 4K+ monitors */
+  margin: 0 auto;
 }
 
 .header {
@@ -149,7 +156,6 @@ h1, h2, h3, h4, h5, h6 {
   animation: fadeIn 0.3s ease-out;
 }
 
-/* --- NEW: Header left grouping --- */
 .header-left {
   display: flex;
   align-items: center;
@@ -195,6 +201,10 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid var(--color-border);
   margin-bottom: 20px;
   animation: fadeIn 0.4s ease-out;
+  
+  /* --- FIX 1: Make panels scrollable --- */
+  /* This will make the table scroll horizontally on mobile */
+  overflow-x: auto;
 }
 
 /* --- 6. Forms (Buttons & Inputs) --- */
@@ -429,7 +439,7 @@ tr:hover {
   margin-bottom: 4px;
 }
 
-/* --- 9. NEW: Mobile Responsive Styles --- */
+/* --- 9. Mobile Responsive Styles --- */
 
 /* Hide hamburger button on desktop */
 .mobile-menu-btn {
@@ -447,15 +457,13 @@ tr:hover {
   animation: fadeIn 0.3s ease;
 }
 
-/* Mobile screens */
+/* Tablet & Mobile */
 @media (max-width: 1000px) {
   .sidebar {
-    /* Hide sidebar off-screen by default */
     transform: translateX(-100%);
   }
   
   .sidebar.is-mobile-open {
-    /* Slide sidebar in */
     transform: translateX(0);
     box-shadow: var(--shadow-lg);
   }
@@ -467,7 +475,7 @@ tr:hover {
   
   .header {
     flex-direction: column;
-    align-items: stretch; /* Make items full width */
+    align-items: stretch; 
     gap: 16px;
   }
   
@@ -482,17 +490,15 @@ tr:hover {
   
   .controls .input {
     flex-grow: 1;
-    min-width: 200px; /* Allow search to take space */
+    min-width: 200px; 
   }
 
-  /* Show the hamburger button */
   .mobile-menu-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
 
-  /* When mobile menu is active, show the backdrop */
   .app.mobile-sidebar-active .sidebar-backdrop {
     display: block;
   }
@@ -503,5 +509,41 @@ tr:hover {
   
   .modal .box {
     padding: 16px;
+    width: 95%;
+  }
+
+  .form-group {
+    min-width: 250px; 
+  }
+}
+
+/* Small phones only */
+@media (max-width: 480px) {
+  .controls {
+    /* --- FIX 2: Remove column direction --- */
+    /* flex-direction: column; */ 
+    align-items: stretch;
+  }
+  
+  .btn {
+    /* --- FIX 3: Remove flex-grow --- */
+    /* flex-grow: 1; */
+  }
+
+  .form-group {
+    min-width: 100%; /* Full width on smallest screens */
+  }
+
+  /* Make form header buttons stack */
+  .panel > div:first-child {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  /* Make sure buttons in form header can wrap */
+  .panel > div:first-child > div:last-child {
+     flex-wrap: wrap;
+     gap: 8px;
   }
 }
