@@ -1,15 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { STAGES, TABS, newLeadTemplate } from '../../constants';
-import { toast, uid, safe, calcEMI, runBRELogic } from '../../utils';
+import { uid, safe, calcEMI, runBRELogic } from '../../logic';
+import { useToast } from '../../contexts/ToastContext';
+import { useBre } from '../../contexts/BreContext';
+import { useLeads } from '../../contexts/LeadsContext';
 import FormGroup from './FormGroup';
 
 export default function LeadForm({
   initialLead,
-  onSave,
+  onSaveSuccess, // Renamed from onSave
   onCancel,
-  breConfig,
   onRunDedupe,
 }) {
+  const { showToast } = useToast();
+  const { bre } = useBre();
+  const { saveLead, isLoading } = useLeads();
+
   const [formLead, setFormLead] = useState(newLeadTemplate);
   const [currentDocs, setCurrentDocs] = useState([]);
   const [currentDeviations, setCurrentDeviations] = useState([]);
@@ -22,7 +28,6 @@ export default function LeadForm({
   const devExpectedRef = useRef();
   const devActualRef = useRef();
 
-  // Load initial data when component mounts or initialLead changes
   useEffect(() => {
     if (initialLead) {
       setFormLead(initialLead);
@@ -46,15 +51,15 @@ export default function LeadForm({
     if (type === 'mobile') {
       value = formLead.mobile;
       field = 'mobile';
-      if (!/^\d{10}$/.test(value)) return toast('Enter valid 10-digit mobile');
+      if (!/^\d{10}$/.test(value)) return showToast('Enter valid 10-digit mobile', 'warning');
     } else if (type === 'pan') {
       value = formLead.pan;
       field = 'pan';
-      if (!/^[A-Z]{5}\d{4}[A-Z]$/i.test(value)) return toast('Enter PAN e.g. AAAAA9999A');
+      if (!/^[A-Z]{5}\d{4}[A-Z]$/i.test(value)) return showToast('Enter PAN e.g. AAAAA9999A', 'warning');
     } else { // email
       value = formLead.email;
       field = 'email';
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return toast('Enter valid email');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return showToast('Enter valid email', 'warning');
     }
     
     setVerificationStatus(prev => ({ ...prev, [field]: '⏳' }));
@@ -66,12 +71,12 @@ export default function LeadForm({
     else if (type === 'email') result = !value.endsWith('@example.com') ? '✅' : '❌';
     
     setVerificationStatus(prev => ({ ...prev, [field]: result }));
-    toast(`${field} verification simulated`);
+    showToast(`${field} verification simulated`, 'success');
   };
 
   const handleDocUpload = () => {
     const f = docInputRef.current.files && docInputRef.current.files[0];
-    if (!f) return toast('Select a file');
+    if (!f) return showToast('Select a file', 'warning');
     
     const reader = new FileReader();
     reader.onload = function (e) {
@@ -85,7 +90,7 @@ export default function LeadForm({
         status: 'Pending'
       };
       setCurrentDocs(prev => [...prev, newDoc]);
-      toast('Uploaded to form (Save Lead to persist)');
+      showToast('Uploaded to form (Save Lead to persist)', 'success');
     };
     reader.readAsDataURL(f);
   };
@@ -94,7 +99,7 @@ export default function LeadForm({
     const n = (devNameRef.current.value || '').trim();
     const ex = (devExpectedRef.current.value || '').trim();
     const ac = (devActualRef.current.value || '').trim();
-    if (!n) return toast('Deviation name required');
+    if (!n) return showToast('Deviation name required', 'warning');
     
     setCurrentDeviations(prev => [...prev, {
       id: uid(), name: n, expected: ex, actual: ac, status: ex === ac ? 'Closed' : 'Open', remarks: ''
@@ -106,7 +111,7 @@ export default function LeadForm({
   };
 
   const handleAutoUW = () => {
-    const res = runBRELogic(formLead, breConfig);
+    const res = runBRELogic(formLead, bre);
     setFormLead(prev => ({
       ...prev,
       foir: res.foir,
@@ -115,45 +120,49 @@ export default function LeadForm({
       reco_product: 'AutoReco',
       uwRemarks: res.reasons.join('; ') || 'Auto UW done'
     }));
-    toast('Auto UW: ' + res.decision);
+    showToast('Auto UW: ' + res.decision, 'success');
   };
   
   const handleCalculateEMI = () => {
     const { sanctionAmt, sanctionROI, sanctionTenure } = formLead;
-    if (!sanctionAmt || !sanctionROI || !sanctionTenure) return toast('Sanction amount/ROI/tenure required');
+    if (!sanctionAmt || !sanctionROI || !sanctionTenure) return showToast('Sanction amount/ROI/tenure required', 'warning');
     const emi = calcEMI(sanctionAmt, sanctionROI, sanctionTenure);
     setFormLead(prev => ({ ...prev, sanctionEMI: emi }));
-    toast('EMI calculated');
+    showToast('EMI calculated', 'success');
   };
 
   const handleRunBreToast = () => {
-    const res = runBRELogic(formLead, breConfig);
-    toast(`BRE Run: ${res.decision}. Reasons: ${res.reasons.join(', ')}`);
+    const res = runBRELogic(formLead, bre);
+    showToast(`BRE Run: ${res.decision}. Reasons: ${res.reasons.join(', ')}`, 'success');
   };
 
-  const onSaveClick = () => {
+  const onSaveClick = async (specificAuditMsg = '', newStatus = null) => {
     const finalLead = {
       ...formLead,
+      status: newStatus || formLead.status,
       documents: currentDocs,
       deviations: currentDeviations,
       mobileVerified: verificationStatus.mobile === '✅',
       panVerified: verificationStatus.pan === '✅',
       emailVerified: verificationStatus.email === '✅',
     };
-    onSave(finalLead);
+    
+    const success = await saveLead(finalLead, specificAuditMsg);
+    if (success) {
+      onSaveSuccess(); // This will close the form
+    }
   };
   
-  // These pass the save event up with a specific status
   const onConfirmDisb = () => {
     const { disbAmt, utr, disbDate } = formLead;
-    if (!disbAmt || !utr || !disbDate) return toast('Amount, UTR, and Date required');
-    onSave({ ...formLead, status: 'Disbursed' }, `Disbursed ${disbAmt} UTR:${utr}`);
+    if (!disbAmt || !utr || !disbDate) return showToast('Amount, UTR, and Date required', 'warning');
+    onSaveClick(`Disbursed ${disbAmt} UTR:${utr}`, 'Disbursed');
   };
 
   const onMarkFI = (isComplete) => {
     const newStatus = isComplete ? 'Underwriting' : 'Rejected';
     const auditMsg = `FI Marked as ${isComplete ? 'Complete' : 'Negative'}. Moved to ${newStatus}`;
-    onSave({ ...formLead, status: newStatus }, auditMsg);
+    onSaveClick(auditMsg, newStatus);
   };
 
   return (
@@ -175,8 +184,10 @@ export default function LeadForm({
           </select>
           <button className="btn ghost" onClick={handleRunBreToast}>Run BRE</button>
           <button className="btn ghost" onClick={() => onRunDedupe(formLead)}>QDE ↔ DDE</button>
-          <button id="lead-form-save-button" className="btn primary" onClick={onSaveClick}>Save Lead</button>
-          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button id="lead-form-save-button" className="btn primary" onClick={() => onSaveClick()} disabled={isLoading}>
+            {isLoading ? 'Saving...' : 'Save Lead'}
+          </button>
+          <button className="btn" onClick={onCancel} disabled={isLoading}>Cancel</button>
         </div>
       </div>
 
@@ -298,8 +309,8 @@ export default function LeadForm({
           <FormGroup label="Neighbour / Field Feedback" style={{ flex: '1 1 100%' }}><textarea value={formLead.neighbor_feedback} onChange={e => handleFormFieldChange('neighbor_feedback', e.target.value)}></textarea></FormGroup>
         </div>
         <div style={{ marginTop: '8px' }}>
-          <button className="btn primary" onClick={() => onMarkFI(true)}>Mark FI Complete</button>
-          <button className="btn" style={{ background: 'var(--danger)', color: '#fff' }} onClick={() => onMarkFI(false)}>Mark FI Negative</button>
+          <button className="btn primary" onClick={() => onMarkFI(true)} disabled={isLoading}>Mark FI Complete</button>
+          <button className="btn" style={{ background: 'var(--danger)', color: '#fff' }} onClick={() => onMarkFI(false)} disabled={isLoading}>Mark FI Negative</button>
         </div>
       </div>
 
@@ -339,7 +350,7 @@ export default function LeadForm({
           <FormGroup label="UTR"><input value={formLead.utr} onChange={e => handleFormFieldChange('utr', e.target.value)} /></FormGroup>
           <FormGroup label="Disbursement Date"><input type="date" value={formLead.disbDate} onChange={e => handleFormFieldChange('disbDate', e.target.value)} /></FormGroup>
         </div>
-        <div style={{ marginTop: '8px' }}><button className="btn primary" onClick={onConfirmDisb}>Confirm Disbursement</button></div>
+        <div style={{ marginTop: '8px' }}><button className="btn primary" onClick={onConfirmDisb} disabled={isLoading}>Confirm Disbursement</button></div>
       </div>
 
       {/* --- Deviations Module --- */}

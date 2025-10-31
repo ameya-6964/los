@@ -1,8 +1,13 @@
 import React, { useRef, useEffect } from 'react';
 import ModalWrapper from './ModalWrapper';
 import FormGroup from '../LeadForm/FormGroup';
+import { useBre } from '../../contexts/BreContext';
+import { useToast } from '../../contexts/ToastContext';
 
-export default function BreConfigModal({ bre, onClose, onSave, onReset }) {
+export default function BreConfigModal({ onClose }) {
+  const { bre, saveBreConfig, resetBre, isLoading } = useBre();
+  const { showToast } = useToast();
+
   const cibilRef = useRef();
   const ageMinRef = useRef();
   const ageMaxRef = useRef();
@@ -10,22 +15,31 @@ export default function BreConfigModal({ bre, onClose, onSave, onReset }) {
   const foirRef = useRef();
 
   useEffect(() => {
-    cibilRef.current.value = bre.minCibil;
-    ageMinRef.current.value = bre.minAge;
-    ageMaxRef.current.value = bre.maxAge;
-    incomeRef.current.value = bre.minIncome;
-    foirRef.current.value = bre.maxFoir;
+    if(bre) {
+      cibilRef.current.value = bre.minCibil;
+      ageMinRef.current.value = bre.minAge;
+      ageMaxRef.current.value = bre.maxAge;
+      incomeRef.current.value = bre.minIncome;
+      foirRef.current.value = bre.maxFoir;
+    }
   }, [bre]);
 
   const handleSave = () => {
-    onSave({
+    const newBre = {
       minCibil: Number(cibilRef.current.value || 650),
       minAge: Number(ageMinRef.current.value || 21),
       maxAge: Number(ageMaxRef.current.value || 65),
       minIncome: Number(incomeRef.current.value || 15000),
       maxFoir: Number(foirRef.current.value || 50)
-    });
+    };
+    saveBreConfig(newBre);
+    onClose();
   };
+  
+  const handleReset = () => {
+    resetBre();
+    onClose();
+  }
 
   return (
     <ModalWrapper title="BRE Configuration" onClose={onClose}>
@@ -37,8 +51,8 @@ export default function BreConfigModal({ bre, onClose, onSave, onReset }) {
         <FormGroup label="Max FOIR (%)"><input ref={foirRef} type="number" /></FormGroup>
       </div>
       <div style={{ marginTop: '12px' }}>
-        <button className="btn primary" onClick={handleSave}>Save</button>
-        <button className="btn" onClick={onReset}>Reset</button>
+        <button className="btn primary" onClick={handleSave} disabled={isLoading}>Save</button>
+        <button className="btn" onClick={handleReset} disabled={isLoading}>Reset</button>
       </div>
     </ModalWrapper>
   );

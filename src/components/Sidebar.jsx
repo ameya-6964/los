@@ -1,6 +1,10 @@
 import React from 'react';
+import { STAGES } from '../constants';
+import { useLeads } from '../contexts/LeadsContext';
 
-export default function Sidebar({ currentStage, onSetStage, navCounts, onGlobalDedupe, onOpenBre, onClearData, STAGES }) {
+export default function Sidebar({ currentStage, onSetStage, onGlobalDedupe, onOpenBre, onClearData }) {
+  const { navCounts } = useLeads(); // Get navCounts from context
+
   return (
     <aside className="sidebar">
       <div className="brand">Loan CRM · LOS</div>

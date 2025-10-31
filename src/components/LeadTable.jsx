@@ -1,8 +1,12 @@
 import React from 'react';
-import { safe, getNextStage, getPrevStage } from '../utils';
+import { safe, getNextStage, getPrevStage } from '../logic';
 import { STAGES } from '../constants';
+import { useLeads } from '../contexts/LeadsContext';
 
-export default function LeadTable({ leads, onView, onEdit, onNext, onBack, onDelete }) {
+export default function LeadTable({ leads, onView, onEdit }) {
+  // Get action handlers from context
+  const { moveNext, moveBack, deleteLead } = useLeads();
+
   return (
     <div className="panel">
       <table>
@@ -33,9 +37,9 @@ export default function LeadTable({ leads, onView, onEdit, onNext, onBack, onDel
                   <td>
                     <button className="action-btn view" onClick={() => onView(r.id)}>View</button>
                     <button className="action-btn edit" onClick={() => onEdit(r)}>Edit</button>
-                    {next && <button className="action-btn next" onClick={() => onNext(r.id)}>Next</button>}
-                    {prev && prev !== 'Home' && <button className="action-btn back" onClick={() => onBack(r.id)}>Back</button>}
-                    <button className="action-btn delete" onClick={() => onDelete(r.id)}>Delete</button>
+                    {next && <button className="action-btn next" onClick={() => moveNext(r.id)}>Next</button>}
+                    {prev && prev !== 'Home' && <button className="action-btn back" onClick={() => moveBack(r.id)}>Back</button>}
+                    <button className="action-btn delete" onClick={() => deleteLead(r.id)}>Delete</button>
                   </td>
                 </tr>
               );

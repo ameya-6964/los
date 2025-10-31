@@ -1,12 +1,14 @@
 import React from 'react';
-import { safe } from '../../utils';
+import { safe } from '../../logic';
+import { useLeads } from '../../contexts/LeadsContext';
 
-export default function FiWidget({ fiTasks, onAssign }) {
+export default function FiWidget({ onAssign }) {
+  const { fiTasks } = useLeads(); // Get tasks from context
+
   return (
     <div className="panel" id="fiWidget">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div><strong>Field Investigation Tasks</strong><div className="small">Leads in FI stage</div></div>
-        {/* Refresh button removed as it's not needed in React's state model */}
       </div>
       <div id="fiList" style={{ marginTop: '10px' }}>
         {fiTasks.length === 0 ? (

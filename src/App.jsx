@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState } from 'react';
 
 // Constants and Utils
-import { STAGES, DEFAULT_BRE, newLeadTemplate } from './constants';
-import { loadState, saveState, toast, uid, addAudit, getNextStage, getPrevStage, runBRELogic, dedupeScore } from './utils';
+import { STAGES, newLeadTemplate } from './constants';
+import { dedupeScore } from './logic';
+import { useLeads } from './contexts/LeadsContext';
+import { useBre } from './contexts/BreContext';
+import { useToast } from './contexts/ToastContext';
 
 // Components
 import Sidebar from './components/Sidebar';
@@ -17,54 +20,38 @@ import GlobalDedupeModal from './components/Modals/GlobalDedupeModal';
 import BreConfigModal from './components/Modals/BreConfigModal';
 import FiAssignModal from './components/Modals/FiAssignModal';
 
+// Local storage key used to persist app data (was referenced as KEY)
+const KEY = 'app_data_v1';
+
 export default function App() {
   // === State ===
-  const [leads, setLeads] = useState(() => loadState().leads);
-  const [bre, setBre] = useState(() => loadState().bre);
   const [currentStage, setCurrentStage] = useState('Home');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState(null); // Holds the lead being edited
-  const [searchTerm, setSearchTerm] = useState('');
   
   // Modal State
   const [activeModal, setActiveModal] = useState(null); // 'view', 'dedupe', 'globalDedupe', 'bre', 'fiAssign'
   const [modalData, setModalData] = useState(null);
 
-  // === Effects ===
-  useEffect(() => {
-    saveState({ leads, bre });
-  }, [leads, bre]);
-
-  // === Memoized Values ===
-  const navCounts = useMemo(() => {
-    return leads.reduce((acc, lead) => {
-      acc[lead.status] = (acc[lead.status] || 0) + 1;
-      return acc;
-    }, {});
-  }, [leads]);
-
-  const filteredLeads = useMemo(() => {
-    const q = searchTerm.toLowerCase();
-    return leads.filter(l =>
-      (currentStage === 'Home' ? true : l.status === currentStage) &&
-      (!q ||
-        (l.name || '').toLowerCase().includes(q) ||
-        (l.mobile || '').includes(q) ||
-        (l.pan || '').toLowerCase().includes(q)
-      )
-    );
-  }, [leads, currentStage, searchTerm]);
-
-  const fiTasks = useMemo(() => {
-    return leads.filter(l => l.status === 'FI');
-  }, [leads]);
+  // === Hooks ===
+  const { 
+    leads = [], 
+    filteredLeads = [],
+    fiTasks = [],
+    saveLead, 
+    deleteLead, 
+    setSearchTerm,
+    isLoading
+  } = useLeads();
   
+  const { resetBre } = useBre();
+  const { showToast } = useToast();
+
   // === Core Handlers ===
   const handleOpenForm = (leadToEdit = null) => {
     if (leadToEdit) {
       setEditingLead(leadToEdit);
     } else {
-      // Create a new lead template, defaulting to the current stage
       const defaultStatus = (currentStage === 'Home' || !currentStage) ? 'New Lead' : currentStage;
       setEditingLead({ ...newLeadTemplate, status: defaultStatus });
     }
@@ -76,75 +63,15 @@ export default function App() {
     setEditingLead(null);
   };
 
-  const handleSaveLead = (formLead, specificAuditMsg = '') => {
-    try {
-      const name = (formLead.name || '').trim();
-      const mobile = (formLead.mobile || '').trim();
-      if (!name) return toast('Name required');
-      if (!/^\d{10}$/.test(mobile)) return toast('Valid 10-digit mobile required');
-
-      let leadToSave = { ...formLead, updatedAt: new Date().toISOString() };
-      
-      const breRes = runBRELogic(leadToSave, bre);
-      // Merge BRE results, but don't overwrite foir if it was manually entered
-      leadToSave = { 
-        ...leadToSave, 
-        decision: breRes.decision, 
-        risk: breRes.risk, 
-        foir: formLead.foir || breRes.foir // Prioritize manually entered FOIR
-      };
-      
-      const auditMsg = specificAuditMsg || (leadToSave.id ? 'Updated' : 'Created') + ` at ${leadToSave.status}. BRE:${breRes.decision}. ${breRes.reasons.join('; ')}`;
-      leadToSave = addAudit(leadToSave, auditMsg);
-
-      if (leadToSave.id) { // Update
-        setLeads(prevLeads => prevLeads.map(l => l.id === leadToSave.id ? leadToSave : l));
-        toast('Lead updated');
-      } else { // Create
-        leadToSave.id = uid();
-        leadToSave.createdAt = new Date().toISOString();
-        setLeads(prevLeads => [...prevLeads, leadToSave]);
-        toast('Lead created');
-      }
-      handleCloseForm();
-    } catch (e) {
-      console.error(e);
-      toast('Save failed (see console)');
-    }
+  const handleSaveLeadSuccess = () => {
+    handleCloseForm();
   };
-  
+
   const handleDeleteLead = (id) => {
-    if (window.confirm('Delete lead?')) {
-      setLeads(prev => prev.filter(l => l.id !== id));
+    if (isFormOpen) {
+      return showToast('Close the form before deleting a lead', 'warning');
     }
-  };
-  
-  const handleStageChange = (id, newStage, auditMsg) => {
-    setLeads(prev => prev.map(l => 
-      l.id === id ? addAudit({ ...l, status: newStage, updatedAt: new Date().toISOString() }, auditMsg) : l
-    ));
-  };
-
-  const handleMoveNext = (id) => {
-    const lead = leads.find(l => l.id === id);
-    if (!lead) return;
-    const next = getNextStage(lead.status, STAGES);
-    if (!next) return toast('No next stage');
-
-    if (next === 'Underwriting' && (!lead.bank || !lead.account || !lead.ifsc)) {
-      const newDev = { id: uid(), name: 'Missing DDE', expected: 'Bank/Account/IFSC', actual: 'Missing', status: 'Open', remarks: 'Blocked' };
-      setLeads(prev => prev.map(l => l.id === id ? addAudit({ ...l, deviations: [...(l.deviations || []), newDev] }, 'Blocked to UW: missing DDE') : l));
-      return toast('DDE missing — deviation created');
-    }
-    handleStageChange(id, next, 'Moved to ' + next);
-  };
-  
-  const handleMoveBack = (id) => {
-    const lead = leads.find(l => l.id === id);
-    if (!lead) return;
-    const prev = getPrevStage(lead.status, STAGES);
-    if (!prev || prev === 'Home') return toast('No previous stage');
-    handleStageChange(id, prev, 'Sent back to ' + prev);
+    deleteLead(id);
   };
 
   // === Modal Handlers ===
@@ -158,7 +85,7 @@ export default function App() {
   };
   
   const handleViewLead = (id) => {
-    const lead = leads.find(l => l.id === id);
+    const lead = (leads || []).find(l => l.id === id);
     if (lead) openModal('view', lead);
   };
   
@@ -169,12 +96,9 @@ export default function App() {
     openModal('dedupe', { q, d, score });
   };
   
-  //
-  // --- THIS IS THE FIXED FUNCTION ---
-  //
   const handleGlobalDedupe = () => {
     const index = {};
-    leads.forEach(l => {
+    (leads || []).forEach(l => {
       if (l.pan) { index['PAN:' + l.pan] = index['PAN:' + l.pan] || []; index['PAN:' + l.pan].push(l); }
       if (l.mobile) { index['MOB:' + l.mobile] = index['MOB:' + l.mobile] || []; index['MOB:' + l.mobile].push(l); }
       if (l.aadhaar) { index['AAD:' + l.aadhaar] = index['AAD:' + l.aadhaar] || []; index['AAD:' + l.aadhaar].push(l); }
@@ -182,30 +106,10 @@ export default function App() {
     const groups = Object.values(index).filter(g => g.length > 1);
     openModal('globalDedupe', groups);
   };
-  // --- END OF FIX ---
-  //
-
-  const handleSaveBreConfig = (newBre) => {
-    setBre(newBre);
-    closeModal();
-    toast('BRE saved');
-  };
-  
-  const handleAssignFi = (agentName) => {
-    if (!agentName) return toast('Agent name required');
-    const leadId = modalData; // modalData holds the leadId
-    
-    setLeads(prev => prev.map(l => 
-      l.id === leadId ? addAudit({ ...l, fieldAgent: agentName }, `Assigned FI agent ${agentName}`) : l
-    ));
-    
-    closeModal();
-    toast('Agent assigned');
-  };
 
   // === Other Tools ===
   const handleExport = () => {
-    if (!leads || leads.length === 0) return toast('No leads');
+    if (!leads || leads.length === 0) return showToast('No leads to export', 'warning');
     const header = ['id', 'name', 'mobile', 'email', 'pan', 'aadhaar', 'product', 'status', 'decision', 'cibil', 'income', 'requested', 'createdAt'];
     const rows = [header.join(',')].concat(
       leads.map(r =>
@@ -219,24 +123,33 @@ export default function App() {
     a.download = 'leads.csv';
     a.click();
     URL.revokeObjectURL(url);
+    showToast('Leads exported', 'success');
   };
 
-  const handleClearData = () => {
+  const handleClearData = async () => {
     if (window.confirm('Clear ALL data? This is permanent.')) {
-      setLeads([]);
-      setBre(DEFAULT_BRE);
-      toast('All data cleared');
+      // Clear the persisted app data and reset BRE config
+      try {
+        localStorage.removeItem(KEY);
+        if (typeof resetBre === 'function') resetBre(); // reset BRE to defaults (if available)
+        window.location.reload(); // easiest way to ensure all contexts re-initialize
+        showToast('All data cleared', 'success');
+      } catch (err) {
+        showToast('Failed to clear data', 'error');
+      }
     }
   };
   
   const handleSaveForm = () => {
     if (!isFormOpen) {
-      return toast('Open a lead to save');
+      return showToast('Open a lead to save', 'warning');
     }
-    // Clicks the save button inside the LeadForm component
     const saveButton = document.getElementById('lead-form-save-button');
     if (saveButton) {
       saveButton.click();
+    } else {
+      // Fallback: try calling saveLead directly if editingLead exists and form provides data
+      showToast('Could not find form save button', 'warning');
     }
   };
 
@@ -245,7 +158,6 @@ export default function App() {
       <Sidebar
         currentStage={currentStage}
         onSetStage={setCurrentStage}
-        navCounts={navCounts}
         onGlobalDedupe={handleGlobalDedupe}
         onOpenBre={() => openModal('bre')}
         onClearData={handleClearData}
@@ -255,7 +167,6 @@ export default function App() {
       <main className="main">
         <Header
           currentStage={currentStage}
-          searchTerm={searchTerm}
           onSearch={setSearchTerm}
           onAddLead={() => handleOpenForm(null)}
           onSave={handleSaveForm}
@@ -264,35 +175,32 @@ export default function App() {
         
         {currentStage === 'Home' && !isFormOpen && (
           <>
-            <StatsCards navCounts={navCounts} onSetStage={setCurrentStage} />
+            <StatsCards onSetStage={setCurrentStage} />
             <FiWidget fiTasks={fiTasks} onAssign={(id) => openModal('fiAssign', id)} />
           </>
         )}
         
         {isFormOpen && (
           <LeadForm
-            key={editingLead ? editingLead.id : 'new'} // Re-mounts the form when lead changes
+            key={editingLead ? editingLead.id : 'new'}
             initialLead={editingLead}
-            onSave={handleSaveLead}
+            onSaveSuccess={handleCloseForm}
             onCancel={handleCloseForm}
-            breConfig={bre}
             onRunDedupe={handleRunDedupe}
           />
         )}
         
         {!isFormOpen && (
           <LeadTable
-            leads={filteredLeads}
+            leads={(filteredLeads || []).filter(l => currentStage === 'Home' || l.status === currentStage)}
             onView={handleViewLead}
             onEdit={handleOpenForm}
-            onNext={handleMoveNext}
-            onBack={handleMoveBack}
             onDelete={handleDeleteLead}
           />
         )}
         
         <div className="panel small">
-          <strong>Data stored in localStorage key:</strong> Main
+          <strong>Data stored in localStorage key:</strong> <code>{KEY}</code>
         </div>
       </main>
 
@@ -300,8 +208,8 @@ export default function App() {
       {activeModal === 'view' && <ViewModal lead={modalData} onClose={closeModal} />}
       {activeModal === 'dedupe' && <DedupeModal data={modalData} onClose={closeModal} />}
       {activeModal === 'globalDedupe' && <GlobalDedupeModal groups={modalData} onClose={closeModal} onViewLead={(id) => { closeModal(); handleViewLead(id); }} />}
-      {activeModal === 'bre' && <BreConfigModal bre={bre} onClose={closeModal} onSave={handleSaveBreConfig} onReset={() => setBre(DEFAULT_BRE)} />}
-      {activeModal === 'fiAssign' && <FiAssignModal onClose={closeModal} onAssign={handleAssignFi} />}
+      {activeModal === 'bre' && <BreConfigModal onClose={closeModal} />}
+      {activeModal === 'fiAssign' && <FiAssignModal leadId={modalData} onClose={closeModal} />}
     </div>
   );
 }
