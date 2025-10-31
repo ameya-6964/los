@@ -23,6 +23,7 @@
   --color-border: #e2e8f0; /* Slate 200 */
   
   /* Sizing & Shadows */
+  --sidebar-width: 240px;
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -81,7 +82,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar {
-  width: 240px;
+  width: var(--sidebar-width);
   background: var(--color-bg-dark);
   color: var(--color-text-light);
   padding: 18px;
@@ -91,6 +92,8 @@ h1, h2, h3, h4, h5, h6 {
   bottom: 0;
   overflow: auto;
   border-right: 1px solid var(--color-border);
+  z-index: 500; /* Needs to be on top */
+  transition: transform 0.3s ease-out; /* Add transition */
 }
 
 .brand {
@@ -132,9 +135,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .main {
-  margin-left: 240px;
+  margin-left: var(--sidebar-width);
   padding: 24px;
   flex: 1;
+  transition: margin-left 0.3s ease-out;
 }
 
 .header {
@@ -143,6 +147,13 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
   margin-bottom: 20px;
   animation: fadeIn 0.3s ease-out;
+}
+
+/* --- NEW: Header left grouping --- */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .controls {
@@ -200,28 +211,23 @@ textarea {
   font-size: 14px;
   color: var(--color-text-primary);
   transition: all 0.2s ease;
-  box-shadow: var(--shadow-sm); /* Add subtle shadow */
+  box-shadow: var(--shadow-sm);
 }
 
-/* THIS IS THE NEW VISIBILITY STYLE FOR TEXT BOXES 
-*/
 input:focus,
 select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--color-primary);
   background-color: var(--color-bg-input-focus);
-  /* Bolder shadow */
   box-shadow: 0 0 0 3px var(--color-primary-shadow); 
 }
 
-/* This adds a pulse animation to the focus ring */
 input:focus:not(:read-only),
 select:focus:not(:read-only),
 textarea:focus:not(:read-only) {
    animation: pulseFocus 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
-
 
 textarea {
   min-height: 80px;
@@ -266,7 +272,6 @@ label {
   cursor: not-allowed;
 }
 
-/* Button click animation */
 .btn:active {
   transform: scale(0.97);
   transition: transform 0.1s ease;
@@ -344,7 +349,7 @@ tr:hover {
 }
 
 .action-btn.view { background: var(--color-accent); }
-.action-btn.edit { background: #06b6d4; } /* Cyan 500 */
+.action-btn.edit { background: #06b6d4; }
 .action-btn.next { background: var(--color-ok); }
 .action-btn.back { background: var(--color-danger); }
 .action-btn.delete { background: var(--color-text-secondary); }
@@ -391,7 +396,7 @@ tr:hover {
   justify-content: center;
   background: rgba(9, 30, 66, 0.54);
   z-index: 200;
-  animation: fadeIn 0.2s ease; /* Modal background fade-in */
+  animation: fadeIn 0.2s ease;
 }
 
 .modal .box {
@@ -403,7 +408,7 @@ tr:hover {
   max-height: 90vh;
   overflow: auto;
   box-shadow: var(--shadow-lg);
-  animation: slideInUp 0.3s ease-out; /* Modal box slide-in */
+  animation: slideInUp 0.3s ease-out;
 }
 
 .small {
@@ -424,25 +429,79 @@ tr:hover {
   margin-bottom: 4px;
 }
 
-/* --- 9. Responsive --- */
+/* --- 9. NEW: Mobile Responsive Styles --- */
+
+/* Hide hamburger button on desktop */
+.mobile-menu-btn {
+  display: none;
+  padding: 8px; /* Make it smaller */
+}
+
+/* Create the backdrop, hidden by default */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 30, 66, 0.54);
+  z-index: 499; /* Below sidebar, above content */
+  animation: fadeIn 0.3s ease;
+}
+
+/* Mobile screens */
 @media (max-width: 1000px) {
   .sidebar {
-    display: none; /* This can be toggled with JS state */
+    /* Hide sidebar off-screen by default */
+    transform: translateX(-100%);
   }
+  
+  .sidebar.is-mobile-open {
+    /* Slide sidebar in */
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg);
+  }
+  
   .main {
     margin-left: 0;
     padding: 12px;
   }
+  
   .header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch; /* Make items full width */
     gap: 16px;
   }
+  
+  .header-left {
+    justify-content: space-between;
+  }
+  
   .controls {
     width: 100%;
     flex-wrap: wrap;
   }
+  
   .controls .input {
     flex-grow: 1;
+    min-width: 200px; /* Allow search to take space */
+  }
+
+  /* Show the hamburger button */
+  .mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* When mobile menu is active, show the backdrop */
+  .app.mobile-sidebar-active .sidebar-backdrop {
+    display: block;
+  }
+  
+  .panel {
+    padding: 12px;
+  }
+  
+  .modal .box {
+    padding: 16px;
   }
 }

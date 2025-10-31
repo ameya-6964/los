@@ -2,18 +2,33 @@ import React from 'react';
 import { STAGES } from '../constants';
 import { useLeads } from '../contexts/LeadsContext';
 
-export default function Sidebar({ currentStage, onSetStage, onGlobalDedupe, onOpenBre, onClearData }) {
-  const { navCounts } = useLeads(); // Get navCounts from context
+export default function Sidebar({ 
+  currentStage, 
+  onSetStage, // This is the new handler from App.jsx that auto-closes
+  onGlobalDedupe, 
+  onOpenBre, 
+  onClearData,
+  isMobileOpen, // new prop
+  onCloseMobile // new prop
+}) {
+  const { navCounts } = useLeads();
+
+  // New handler to close the menu when a link is clicked
+  const handleNavClick = (stage) => {
+    onSetStage(stage);
+    // onCloseMobile(); // This is already handled in App.jsx's handleSetStage
+  };
 
   return (
-    <aside className="sidebar">
+    // Add the 'is-mobile-open' class when active
+    <aside className={`sidebar ${isMobileOpen ? 'is-mobile-open' : ''}`}>
       <div className="brand">Loan CRM · LOS</div>
       <ul className="nav-list">
         {STAGES.map(s => (
           <li
             key={s}
             className={`nav-item ${s === currentStage ? 'active' : ''}`}
-            onClick={() => onSetStage(s)}
+            onClick={() => handleNavClick(s)} // Use new handler
           >
             <span>{s}</span>
             <span className="small">{navCounts[s] || 0}</span>
