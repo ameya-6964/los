@@ -1,5 +1,6 @@
 import React from 'react';
 import { useLeads } from '../contexts/LeadsContext';
+import { useAuth } from '../contexts/AuthContext'; // <-- 1. Import useAuth
 
 // Simple SVG for the hamburger icon
 const MenuIcon = () => (
@@ -22,17 +23,17 @@ const MenuIcon = () => (
 
 export default function Header({ currentStage, onAddLead, onSave, onExport, onToggleMobileSidebar }) {
   const { searchTerm, setSearchTerm, isLoading } = useLeads();
+  const { formPermissions, logout, currentUser } = useAuth(); // <-- 2. Get logout and currentUser
 
   return (
     <div className="header">
       <div className="header-left">
-        {/* --- NEW: Hamburger Menu Button --- */}
         <button className="btn ghost mobile-menu-btn" onClick={onToggleMobileSidebar}>
           <MenuIcon />
         </button>
         <div>
           <h1 id="pageTitle">{currentStage}</h1>
-          <div className="small">Single-file prototype — React Version</div>
+          <div className="small">Welcome, <strong>{currentUser.name}</strong> ({currentUser.role})</div>
         </div>
       </div>
       <div className="controls">
@@ -42,11 +43,25 @@ export default function Header({ currentStage, onAddLead, onSave, onExport, onTo
           value={searchTerm}
           onInput={e => setSearchTerm(e.target.value)}
         />
-        <button className="btn primary" onClick={onAddLead}>Add Lead</button>
+        
+        {/* --- 3. Only show "Add Lead" if user has permission --- */}
+        {formPermissions.canCreateLead && (
+          <button className="btn primary" onClick={onAddLead}>Add Lead</button>
+        )}
+        
         <button className="btn ghost" title="Save open form" onClick={onSave} disabled={isLoading}>
           {isLoading ? 'Saving...' : 'Save'}
         </button>
         <button className="btn ghost" onClick={onExport}>Export CSV</button>
+        
+        {/* --- 4. ADD LOGOUT BUTTON --- */}
+        <button 
+          className="btn ghost" 
+          onClick={logout} 
+          style={{borderColor: 'var(--color-danger)', color: 'var(--color-danger)'}}
+        >
+          Logout
+        </button>
       </div>
     </div>
   );

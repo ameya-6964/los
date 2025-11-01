@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 
 // Constants and Utils
 import { STAGES, DEFAULT_BRE, newLeadTemplate, KEY } from './constants';
@@ -6,6 +6,7 @@ import { dedupeScore } from './logic';
 import { useLeads } from './contexts/LeadsContext';
 import { useBre } from './contexts/BreContext';
 import { useToast } from './contexts/ToastContext';
+import { useAuth } from './contexts/AuthContext'; 
 import { saveState } from './storage'; 
 
 // Components
@@ -20,6 +21,7 @@ import DedupeModal from './components/Modals/DedupeModal';
 import GlobalDedupeModal from './components/Modals/GlobalDedupeModal';
 import BreConfigModal from './components/Modals/BreConfigModal';
 import FiAssignModal from './components/Modals/FiAssignModal';
+import LoginPage from './components/LoginPage';
 
 export default function App() {
   // === State ===
@@ -41,6 +43,7 @@ export default function App() {
   
   const { resetBre } = useBre();
   const { showToast } = useToast();
+  const { currentUser, visibleStages } = useAuth(); 
 
   // === Core Handlers ===
   const handleOpenForm = (leadToEdit = null) => {
@@ -146,10 +149,20 @@ export default function App() {
   };
 
   const handleSetStage = (stage) => {
-    setCurrentStage(stage);
+    if (visibleStages.includes(stage)) {
+      setCurrentStage(stage);
+    } else {
+      setCurrentStage('Home'); 
+    }
     closeMobileSidebar();
   };
+  
+  // --- Check login status ---
+  if (!currentUser) {
+    return <LoginPage />;
+  }
 
+  // --- User is logged in, render the main app ---
   return (
     <div className={`app ${isMobileSidebarOpen ? 'mobile-sidebar-active' : ''}`}>
       <Sidebar
@@ -158,13 +171,10 @@ export default function App() {
         onGlobalDedupe={handleGlobalDedupe}
         onOpenBre={() => openModal('bre')}
         onClearData={handleClearData}
-        STAGES={STAGES}
         isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={closeMobileSidebar}
       />
       
       <main className="main">
-        {/* --- NEW WRAPPER ADDED --- */}
         <div className="main-content-wrapper">
           <Header
             currentStage={currentStage}
@@ -205,7 +215,6 @@ export default function App() {
             <strong>Data stored in localStorage key:</strong> <code>{KEY}</code>
           </div>
         </div>
-        {/* --- END OF NEW WRAPPER --- */}
       </main>
 
       <div 

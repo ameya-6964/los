@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { STAGES } from '../constants';
-import { apiFetchLeads, apiSaveLead, apiDeleteLead } from '../api';
+import { apiFetchLeads, apiSaveLead, apiDeleteLead } from '../api'; // Import new API
 import { useToast } from './ToastContext';
 import { uid, addAudit, getNextStage, getPrevStage, runBRELogic } from '../logic';
 import { useBre } from './BreContext';
+import { useAuth } from './AuthContext'; // Import useAuth to check for login
 
 const LeadsContext = createContext();
 
@@ -16,18 +17,27 @@ export const LeadsProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const { showToast } = useToast();
-  const { bre } = useBre(); // Get BRE config from its own context
+  const { bre } = useBre(); 
+  const { currentUser } = useAuth(); // Get currentUser
 
-  // Load leads from API on mount
+  // Load leads from API on mount, *only if logged in*
   useEffect(() => {
-    apiFetchLeads().then(fetchedLeads => {
-      setLeads(fetchedLeads);
-      setIsLoading(false);
-    }).catch(err => {
-      showToast('Failed to fetch leads', 'error');
-      setIsLoading(false);
-    });
-  }, [showToast]);
+    if (currentUser) { // Only fetch if we are logged in
+      setIsLoading(true);
+      apiFetchLeads()
+        .then(response => {
+          setLeads(response.data);
+        })
+        .catch(err => {
+          showToast('Failed to fetch leads from server', 'error');
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    } else {
+      setLeads([]); // If logged out, clear leads
+    }
+  }, [currentUser, showToast]); // Re-run when user logs in
 
   // Memoized values
   const navCounts = useMemo(() => {
@@ -38,7 +48,7 @@ export const LeadsProvider = ({ children }) => {
   }, [leads]);
 
   const filteredLeads = useMemo(() => {
-    const q = (searchTerm || '').toLowerCase();
+    const q = searchTerm.toLowerCase();
     return (leads || []).filter(l =>
       (!q ||
         (l.name || '').toLowerCase().includes(q) ||
@@ -72,9 +82,7 @@ export const LeadsProvider = ({ children }) => {
       };
       
       const isNew = !leadToSave.id;
-      // make the intent explicit with parentheses
-      const defaultAudit = (isNew ? 'Created' : 'Updated') + ` at ${leadToSave.status}. BRE:${breRes.decision}. ${breRes.reasons.join('; ')}`;
-      const auditMsg = specificAuditMsg || defaultAudit;
+      const auditMsg = specificAuditMsg || (isNew ? 'Created' : 'Updated') + ` at ${leadToSave.status}. BRE:${breRes.decision}. ${breRes.reasons.join('; ')}`;
       leadToSave = addAudit(leadToSave, auditMsg);
 
       if (isNew) {
@@ -82,7 +90,10 @@ export const LeadsProvider = ({ children }) => {
         leadToSave.createdAt = new Date().toISOString();
       }
 
-      const saved = await apiSaveLead(leadToSave);
+      // --- NEW API CALL ---
+      const response = await apiSaveLead(leadToSave);
+      const saved = response.data;
+      // --- END NEW API CALL ---
       
       if (isNew) {
         setLeads(prev => [...prev, saved]);
@@ -91,10 +102,10 @@ export const LeadsProvider = ({ children }) => {
         setLeads(prev => prev.map(l => (l.id === saved.id ? saved : l)));
         showToast('Lead updated!', 'success');
       }
-      return true; // Signal success
+      return true; 
     } catch (e) {
       showToast(e.message || 'Save failed', 'error');
-      return false; // Signal failure
+      return false; 
     } finally {
       setIsLoading(false);
     }
@@ -104,7 +115,9 @@ export const LeadsProvider = ({ children }) => {
     if (!window.confirm('Delete lead?')) return;
     setIsLoading(true);
     try {
+      // --- NEW API CALL ---
       await apiDeleteLead(leadId);
+      // --- END NEW API CALL ---
       setLeads(prev => prev.filter(l => l.id !== leadId));
       showToast('Lead deleted.', 'success');
     } catch (e) {
@@ -114,15 +127,16 @@ export const LeadsProvider = ({ children }) => {
     }
   }, [showToast]);
 
+  // This is a helper function *inside* the context
   const updateLead = useCallback(async (updatedLead) => {
     setIsLoading(true);
     try {
-      const saved = await apiSaveLead(updatedLead);
+      const response = await apiSaveLead(updatedLead); // Use the save API
+      const saved = response.data;
       setLeads(prev => prev.map(l => (l.id === saved.id ? saved : l)));
       return saved;
     } catch (e) {
       showToast('Failed to update lead', 'error');
-      return null;
     } finally {
       setIsLoading(false);
     }
@@ -145,19 +159,15 @@ export const LeadsProvider = ({ children }) => {
     const updatedLead = addAudit({ ...lead, status: next }, 'Moved to ' + next);
     await updateLead(updatedLead);
   }, [leads, updateLead, showToast]);
-
+  
   const moveBack = useCallback(async (id) => {
     const lead = leads.find(l => l.id === id);
     if (!lead) return;
     const prev = getPrevStage(lead.status, STAGES);
-    if (!prev || prev === 'Home') {
-      showToast('No previous stage', 'warning');
-      return;
-    }
-
-    const updatedLead = addAudit({ ...lead, status: prev }, "Sent back to 'DDE'");
+    if (!prev || prev === 'Home') return showToast('No previous stage', 'warning');
+    
+    const updatedLead = addAudit({ ...lead, status: prev }, 'Sent back to ' + prev);
     await updateLead(updatedLead);
-    showToast(`Sent back to ${prev}`, 'info');
   }, [leads, updateLead, showToast]);
 
   const assignFiAgent = useCallback(async (leadId, agentName) => {

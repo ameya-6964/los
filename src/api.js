@@ -1,65 +1,26 @@
-import { loadState, saveState } from './storage';
+import axios from 'axios';
 
-const SIMULATED_DELAY = 500; // 500ms delay
+// Set the base URL for all our API requests
+const API_URL = 'http://localhost:4000/api';
+
+const api = axios.create({
+  baseURL: API_URL,
+});
 
 // --- Leads API ---
-
-export const apiFetchLeads = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const state = loadState();
-      resolve([...state.leads]); // Return a copy
-    }, SIMULATED_DELAY);
-  });
+export const apiFetchLeads = () => api.get('/leads');
+export const apiSaveLead = (lead) => {
+  // If the lead has an ID, it's an update (PUT). If not, it's a create (POST).
+  if (lead.id) {
+    return api.put(`/leads/${lead.id}`, lead);
+  }
+  return api.post('/leads', lead);
 };
-
-export const apiSaveLead = (leadToSave) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const state = loadState();
-      const isUpdate = state.leads.some(l => l.id === leadToSave.id);
-      let newLeads;
-
-      if (isUpdate) {
-        newLeads = state.leads.map(l => (l.id === leadToSave.id ? leadToSave : l));
-      } else {
-        newLeads = [...state.leads, leadToSave];
-      }
-      
-      saveState({ ...state, leads: newLeads });
-      resolve(leadToSave);
-    }, SIMULATED_DELAY);
-  });
-};
-
-export const apiDeleteLead = (leadId) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const state = loadState();
-      const newLeads = state.leads.filter(l => l.id !== leadId);
-      saveState({ ...state, leads: newLeads });
-      resolve(leadId);
-    }, SIMULATED_DELAY);
-  });
-};
+export const apiDeleteLead = (leadId) => api.delete(`/leads/${leadId}`);
 
 // --- BRE API ---
+export const apiFetchBre = () => api.get('/bre');
+export const apiSaveBre = (newBre) => api.put('/bre', newBre);
 
-export const apiFetchBre = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const state = loadState();
-      resolve({ ...state.bre }); // Return a copy
-    }, SIMULATED_DELAY);
-  });
-};
-
-export const apiSaveBre = (newBre) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const state = loadState();
-      saveState({ ...state, bre: newBre });
-      resolve(newBre);
-    }, SIMULATED_DELAY);
-  });
-};
+// --- Auth API ---
+export const apiLogin = (userId) => api.post('/login', { userId });

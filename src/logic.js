@@ -91,3 +91,65 @@ export const addAudit = (lead, msg) => {
     audit: [...(lead.audit || []), { ts: now(), msg }]
   };
 };
+
+
+// --- AUTH & PERMISSIONS LOGIC ---
+
+export const USER_ROLES = {
+  ADMIN: 'Admin',
+  QDE_OFFICER: 'QDE Officer',
+  FIELD_INVESTIGATOR: 'Field Investigator',
+  UNDERWRITER: 'Underwriter',
+  SANCTIONS_OFFICER: 'Sanctions Officer',
+};
+
+export const USERS = [
+  { id: 'u1', name: 'Ameya (Admin)', role: USER_ROLES.ADMIN },
+  { id: 'u2', name: 'Priya (QDE)', role: USER_ROLES.QDE_OFFICER },
+  { id: 'u3', name: 'Raj (Field Agent)', role: USER_ROLES.FIELD_INVESTIGATOR },
+  { id: 'u4', name: 'Vikram (Underwriter)', role: USER_ROLES.UNDERWRITER },
+  { id: 'u5', name: 'Sunita (Sanctions)', role: USER_ROLES.SANCTIONS_OFFICER },
+];
+
+const allStages = ['New Lead', 'QDE', 'DDE', 'Document Collection', 'FI', 'Underwriting', 'Sanctioned', 'Disbursed', 'Active', 'Rejected'];
+
+// Define what each role can see in the sidebar
+export const getVisibleStages = (role) => {
+  switch (role) {
+    case USER_ROLES.ADMIN:
+      return ['Home', ...allStages];
+    case USER_ROLES.QDE_OFFICER:
+      return ['Home', 'New Lead', 'QDE', 'DDE'];
+    case USER_ROLES.FIELD_INVESTIGATOR:
+      return ['Home', 'FI'];
+    case USER_ROLES.UNDERWRITER:
+      return ['Home', 'FI', 'Underwriting'];
+    case USER_ROLES.SANCTIONS_OFFICER:
+      return ['Home', 'Sanctioned', 'Disbursed'];
+    default:
+      return ['Home'];
+  }
+};
+
+// Define what each role can edit in the form
+export const getFormPermissions = (role) => {
+  const allReadOnly = {
+    canCreateLead: false, 
+    qde: false, dde: false, docs: false, fi: false, uw: false, san: false, disb: false, dev: false
+  };
+
+  switch (role) {
+    case USER_ROLES.ADMIN:
+      return { canCreateLead: true, qde: true, dde: true, docs: true, fi: true, uw: true, san: true, disb: true, dev: true };
+    case USER_ROLES.QDE_OFFICER:
+      return { ...allReadOnly, canCreateLead: true, qde: true, dde: true, docs: true };
+    case USER_ROLES.FIELD_INVESTIGATOR:
+      return { ...allReadOnly, fi: true };
+    case USER_ROLES.UNDERWRITER:
+      return { ...allReadOnly, uw: true, dev: true };
+    case USER_ROLES.SANCTIONS_OFFICER:
+      return { ...allReadOnly, san: true, disb: true };
+    default:
+      return allReadOnly;
+  }
+};
