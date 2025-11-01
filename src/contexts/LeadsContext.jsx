@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { STAGES } from '../constants';
-import { apiFetchLeads, apiSaveLead, apiDeleteLead } from '../api'; // Import new API
+// --- 1. IMPORT THE NEW FUNCTIONS ---
+import { apiFetchLeads, apiCreateLead, apiUpdateLead, apiDeleteLead } from '../api';
 import { useToast } from './ToastContext';
 import { uid, addAudit, getNextStage, getPrevStage, runBRELogic } from '../logic';
 import { useBre } from './BreContext';
@@ -81,19 +82,24 @@ export const LeadsProvider = ({ children }) => {
         foir: formLead.foir || breRes.foir
       };
       
-      const isNew = !leadToSave.id;
+      const isNew = !leadToSave.id; // <-- This flag is the key
       const auditMsg = specificAuditMsg || (isNew ? 'Created' : 'Updated') + ` at ${leadToSave.status}. BRE:${breRes.decision}. ${breRes.reasons.join('; ')}`;
-      leadToSave = addAudit(leadToSave, auditMsg);
 
       if (isNew) {
         leadToSave.id = uid();
         leadToSave.createdAt = new Date().toISOString();
       }
+      
+      leadToSave = addAudit(leadToSave, auditMsg);
 
-      // --- NEW API CALL ---
-      const response = await apiSaveLead(leadToSave);
+      // --- 2. THIS IS THE FIX ---
+      // Use the 'isNew' flag to call the correct, explicit API function.
+      const response = isNew 
+        ? await apiCreateLead(leadToSave) 
+        : await apiUpdateLead(leadToSave);
+        
       const saved = response.data;
-      // --- END NEW API CALL ---
+      // --- END OF FIX ---
       
       if (isNew) {
         setLeads(prev => [...prev, saved]);
@@ -115,9 +121,7 @@ export const LeadsProvider = ({ children }) => {
     if (!window.confirm('Delete lead?')) return;
     setIsLoading(true);
     try {
-      // --- NEW API CALL ---
       await apiDeleteLead(leadId);
-      // --- END NEW API CALL ---
       setLeads(prev => prev.filter(l => l.id !== leadId));
       showToast('Lead deleted.', 'success');
     } catch (e) {
@@ -131,7 +135,9 @@ export const LeadsProvider = ({ children }) => {
   const updateLead = useCallback(async (updatedLead) => {
     setIsLoading(true);
     try {
-      const response = await apiSaveLead(updatedLead); // Use the save API
+      // --- 3. FIX THE HELPER FUNCTION TOO ---
+      // This should only ever *update*, so we call apiUpdateLead
+      const response = await apiUpdateLead(updatedLead); // Use the new update API
       const saved = response.data;
       setLeads(prev => prev.map(l => (l.id === saved.id ? saved : l)));
       return saved;

@@ -1,6 +1,6 @@
 import React from 'react';
 import ModalWrapper from './ModalWrapper';
-import { safe } from '../../utils';
+import { safe } from '../../logic'; // <-- This is the fix
 
 export default function DedupeModal({ data, onClose }) {
   const { q, d, score } = data;

@@ -9,13 +9,20 @@ const api = axios.create({
 
 // --- Leads API ---
 export const apiFetchLeads = () => api.get('/leads');
-export const apiSaveLead = (lead) => {
-  // If the lead has an ID, it's an update (PUT). If not, it's a create (POST).
-  if (lead.id) {
-    return api.put(`/leads/${lead.id}`, lead);
-  }
+
+// --- FIX: Create two distinct functions ---
+
+// Use POST for creating a new lead
+export const apiCreateLead = (lead) => {
   return api.post('/leads', lead);
 };
+
+// Use PUT for updating an existing lead
+export const apiUpdateLead = (lead) => {
+  return api.put(`/leads/${lead.id}`, lead);
+};
+// --- END OF FIX ---
+
 export const apiDeleteLead = (leadId) => api.delete(`/leads/${leadId}`);
 
 // --- BRE API ---
